@@ -1,5 +1,6 @@
 import numpy as np
 import warnings
+import pandas as pd
 from sage import utils
 
 
@@ -54,7 +55,8 @@ class MarginalImputer(Imputer):
     def __call__(self, x, S):
         # Prepare x and S.
         n = len(x)
-        x = x.repeat(self.samples, 0)
+        #x = x.repeat(self.samples, 0)
+        x = pd.DataFrame(x.values.repeat(self.samples, 0), columns=x.columns)
         S = S.repeat(self.samples, 0)
 
         # Prepare samples.
@@ -63,7 +65,8 @@ class MarginalImputer(Imputer):
 
         # Replace specified indices.
         x_ = x.copy()
-        x_[~S] = self.data_repeat[~S]
+        #x_[~S] = self.data_repeat[~S]
+        x_ = x_.where(~S, self.data_repeat)
 
         # Make predictions.
         pred = self.model(x_)

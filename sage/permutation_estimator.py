@@ -13,10 +13,17 @@ class PermutationEstimator:
     '''
     def __init__(self,
                  imputer,
-                 loss='cross entropy'):
+                 loss='cross entropy',
+                 process_id=None,
+                 message_queue=None):
         self.imputer = imputer
         self.loss_fn = utils.get_loss(loss, reduction='none')
+        self.process_id = process_id
+        self.message_queue = message_queue
 
+    def message_if_available(self, message):
+        if self.message_queue:
+            self.message_queue.put(message)
     def __call__(self,
                  X,
                  Y=None,
@@ -27,7 +34,7 @@ class PermutationEstimator:
                  min_coalition=0.0,
                  max_coalition=1.0,
                  verbose=False,
-                 bar=True):
+                 bar=False):
         '''
         Estimate SAGE values.
 
@@ -51,6 +58,7 @@ class PermutationEstimator:
 
         Returns: Explanation object.
         '''
+        self.message_if_available('SAGE for {}'.format(self.process_id))
         # Determine explanation type.
         if Y is not None:
             explanation_type = 'SAGE'
@@ -100,16 +108,20 @@ class PermutationEstimator:
         # Setup.
         arange = np.arange(batch_size)
         scores = np.zeros((batch_size, num_features))
+        convergence_scores = np.zeros((batch_size, num_features))
         S = np.zeros((batch_size, num_features), dtype=bool)
         permutations = np.tile(np.arange(num_features), (batch_size, 1))
         tracker = utils.ImportanceTracker()
+        convergence_tracker = utils.ImportanceTracker()
 
         # Permutation sampling.
         for it in range(n_loops):
             # Sample data.
             mb = np.random.choice(N, batch_size)
-            x = X[mb]
-            y = Y[mb]
+            #x = X[mb]
+            x = X.iloc[mb]
+            #y = Y[mb]
+            y = np.array(Y[mb])
 
             # Sample permutations.
             S[:] = 0
@@ -119,6 +131,7 @@ class PermutationEstimator:
             # Calculate sample counts.
             if relaxed:
                 scores[:] = 0
+                convergence_scores[:] = 0
                 sample_counts = np.zeros(num_features, dtype=int)
                 for i in range(batch_size):
                     sample_counts[permutations[i, min_coalition:max_coalition]] = (
@@ -132,6 +145,7 @@ class PermutationEstimator:
 
             # Make prediction with minimum coalition.
             y_hat = self.imputer(x, S)
+            prev_y_hat = y_hat
             prev_loss = self.loss_fn(y_hat, y)
 
             # Add all remaining features.
@@ -145,8 +159,12 @@ class PermutationEstimator:
                 loss = self.loss_fn(y_hat, y)
 
                 # Calculate delta sample.
-                scores[arange, inds] = prev_loss - loss
+                convergence_scores[arange, inds] = prev_loss - loss
+                total_information_increase = np.array(list(map(lambda x: 1 if x == 0 else x, (prev_loss + loss))))
+                weighted_information_gain = np.array(list(map(lambda x: 1 if x > 1 else x, (1 + ((prev_loss - loss) / total_information_increase)))))
+                scores[arange, inds] = np.abs((y_hat - prev_y_hat) * weighted_information_gain)
                 prev_loss = loss
+                prev_y_hat = y_hat
 
                 # Update bar (if not detecting convergence).
                 if bar and (not detect_convergence):
@@ -154,12 +172,13 @@ class PermutationEstimator:
 
             # Update tracker.
             tracker.update(scores, sample_counts)
-
+            convergence_tracker.update(convergence_scores, sample_counts)
             # Calculate progress.
-            std = np.max(tracker.std)
-            gap = max(tracker.values.max() - tracker.values.min(), 1e-12)
+            std = np.max(convergence_tracker.std)
+            gap = max(convergence_tracker.values.max() - convergence_tracker.values.min(), 1e-12)
             ratio = std / gap
 
+            self.message_if_available('SAGE for {} convergence {}'.format(self.process_id, ratio))
             # Print progress message.
             if verbose:
                 if detect_convergence:

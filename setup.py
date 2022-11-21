@@ -22,7 +22,8 @@ setuptools.setup(
         'numpy',
         'scipy',
         'matplotlib',
-        'tqdm'
+        'tqdm',
+        'pandas'
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
