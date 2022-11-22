@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="sage-importance",
-    version="0.0.4",
+    version="0.0.5",
     author="Ian Covert",
     author_email="icovert@cs.washington.edu",
     description="For calculating global feature importance using Shapley values.",
@@ -16,7 +16,7 @@ setuptools.setup(
         the [paper](https://arxiv.org/abs/2004.00668) for more details.
     """,
     long_description_content_type="text/markdown",
-    url="https://github.com/iancovert/sage/",
+    url="https://github.com/notincoming/sage/",
     packages=['sage'],
     install_requires=[
         'numpy',
